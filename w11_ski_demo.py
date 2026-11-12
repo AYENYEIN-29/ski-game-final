@@ -80,13 +80,23 @@ def create_course_row(state, rng, with_tree=True):
 
     left = center - half
     right = center + half
+
+    # 木を生成する
     tree = None
     tree_rate = min(0.52, 0.23 + (state["level"] - 1) * 0.055)
     if with_tree and rng.random() < tree_rate:
         tree = rng.randint(left + 3, right - 3)
 
-    return {"left": left, "right": right, "tree": tree}
+    # コインを生成する
+    coin = None
+    if with_tree and rng.random() < 0.20:
+        coin = rng.randint(left + 3, right - 3)
 
+        # 木と同じ位置にコインを置かない
+        if coin == tree:
+            coin = None
+
+    return {"left": left, "right": right, "tree": tree, "coin": coin}
 
 def update_distance_score(state):
     """w11演習01：コースが1行進んだときに、1回だけ呼び出される。"""
@@ -118,6 +128,9 @@ def check_collision(state):
     elif row["tree"] == player_x:
         state["game_over_reason"] = "TREE!"
         state["status"] = STATUS_GAME_OVER
+    elif row["coin"] == player_x:
+        state["score"] += 100
+        row["coin"] = None
 
 
 def update_game(state, dt, rng):
@@ -193,6 +206,8 @@ def draw_game(screen, state):
             chars[x] = "*"
         if row["tree"] is not None:
             chars[row["tree"]] = "A"
+        if row["coin"] is not None:
+            chars[row["coin"]] = "@"
         if i == state["y"] and 0 <= player_x < width:
             chars[player_x] = "X" if state["status"] == STATUS_GAME_OVER else "O"
         screen.addnstr(FIELD_TOP + i, offset, "".join(chars), width)
