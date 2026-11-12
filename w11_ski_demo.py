@@ -41,6 +41,7 @@ def create_state(field_width, field_height, rng):
     half_width = min(19, max(13, (field_width - 12) // 2))
     state = {
         "status": STATUS_READY,
+        "difficulty": "NORMAL",
         "x": field_width // 2,
         "y": max(3, int(field_height * 0.35)),
         "direction": 1,     # -1: 左、+1: 右。直進（0）は使わない。
@@ -139,10 +140,17 @@ def update_game(state, dt, rng):
         return
 
     state["elapsed_time"] += dt
-    state["speed"] = state["base_speed"] + (state["level"] - 1) * 0.15
+
+    # 難易度によって速度を変更する
+    multiplier = 1.3 if state["difficulty"] == "HARD" else 1.0
+
+    state["speed"] = (
+        state["base_speed"] + (state["level"] - 1) * 0.15
+    ) * multiplier
 
     # 毎フレームではなく、実際に1行進んだときだけ位置と距離を更新する。
     state["scroll_progress"] += 3.0 * state["speed"] * dt
+
     while state["scroll_progress"] >= 1.0 and state["status"] == STATUS_PLAYING:
         state["scroll_progress"] -= 1.0
         move_course_one_row(state, rng)
@@ -151,25 +159,38 @@ def update_game(state, dt, rng):
 
 def read_key(state, key):
     """キー入力をStateへ反映する。再起動要求なら True を返す。"""
+
+    # READY中だけ難易度を選択する
+    if state["status"] == STATUS_READY:
+        if key in (ord("n"), ord("N")):
+            state["difficulty"] = "NORMAL"
+        elif key in (ord("h"), ord("H")):
+            state["difficulty"] = "HARD"
+
+    # Qキーで終了
     if key in (ord("q"), ord("Q")):
         return "QUIT"
+
+    # ゲームオーバー後にRキーで再スタート
     if state["status"] == STATUS_GAME_OVER and key in (ord("r"), ord("R")):
         return "RESTART"
+
+    # Spaceキーで開始・一時停止・再開
     if key == ord(" "):
         if state["status"] in (STATUS_READY, STATUS_PAUSED):
             state["status"] = STATUS_PLAYING
         elif state["status"] == STATUS_PLAYING:
             state["status"] = STATUS_PAUSED
         return None
+
+    # プレイ中だけ左右の方向を変更
     if state["status"] == STATUS_PLAYING:
-        # 進行方向は左(-1)か右(+1)の二択。
-        # 連打しても旋回は強くならない。
         if key == curses.KEY_LEFT:
             state["direction"] = -1
         elif key == curses.KEY_RIGHT:
             state["direction"] = 1
-    return None
 
+    return None
 
 def draw_line(screen, y, text, style=0):
     """右下隅への書き込みによるcursesエラーを避けて表示する。"""
@@ -213,7 +234,7 @@ def draw_game(screen, state):
         screen.addnstr(FIELD_TOP + i, offset, "".join(chars), width)
 
     if state["status"] == STATUS_READY:
-        message = "READY! Press SPACE to start"
+        message = "READY! N: NORMAL / H: HARD | SPACE: start"
     elif state["status"] == STATUS_PAUSED:
         message = "PAUSED - Press SPACE to resume"
     elif state["status"] == STATUS_GAME_OVER:
