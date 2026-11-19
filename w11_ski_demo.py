@@ -51,6 +51,7 @@ def create_state(field_width, field_height, rng):
         "scroll_count": 0,    # コースが進んだ行数
         "score": 0,           # w11演習01で更新する
         "level": 1,           # 100行進むごとに上昇
+        "lives": 3,  # プレイヤーの残りライフ
         "scroll_progress": 0.0,
         "field_width": field_width,
         "field_height": field_height,
@@ -120,20 +121,36 @@ def move_course_one_row(state, rng):
 
 
 def check_collision(state):
-    """現在のプレイヤー位置に崖または木があるか判定する。"""
+    """プレイヤーと障害物の衝突を判定する。"""
     player_x = int(round(state["x"]))
     row = state["rows"][state["y"]]
+
     if player_x <= row["left"] or player_x >= row["right"]:
-        state["game_over_reason"] = "CLIFF!"
-        state["status"] = STATUS_GAME_OVER
+        reason = "CLIFF!"
     elif row["tree"] == player_x:
-        state["game_over_reason"] = "TREE!"
-        state["status"] = STATUS_GAME_OVER
+        reason = "TREE!"
+    else:
+        reason = None
+
+    if reason:
+        state["lives"] -= 1
+
+        if state["lives"] <= 0:
+            state["game_over_reason"] = reason
+            state["status"] = STATUS_GAME_OVER
+        else:
+            # コース内の安全な位置を探す
+            safe_x = (row["left"] + row["right"]) // 2
+
+            if safe_x == row["tree"]:
+                safe_x += 1
+
+            state["x"] = safe_x
+
     elif row["coin"] == player_x:
         state["score"] += 100
         row["coin"] = None
-
-
+        
 def update_game(state, dt, rng):
     """プレイ中だけ時間・位置・コースを更新する。"""
     if state["status"] != STATUS_PLAYING:
@@ -209,9 +226,10 @@ def draw_game(screen, state):
     t = state["elapsed_time"]
     mins, seconds = divmod(int(t), 60)
     hud = (
-        f"LV {state['level']:02d} | SCORE {state['score']:05d} | "
-        f"DIST {state['scroll_count']:05d} | TIME {mins:02d}:{seconds:02d}"
-    )
+        f"LV {state['level']:02d} | LIVES {state['lives']} | "
+        f"SCORE {state['score']:05d} | DIST {state['scroll_count']:05d} | "
+        f"TIME {mins:02d}:{seconds:02d}"
+)
     turn = "LEFT" if state["direction"] == -1 else "RIGHT"
     info = f"SPEED {state['speed']:.2f}x | TURN {turn} | STATE {state['status']}"
     draw_line(screen, 0, hud, curses.A_BOLD)
