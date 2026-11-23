@@ -9,6 +9,8 @@ w11演習01：update_distance_score() の中だけを実装する。
 import random
 import time
 from collections import deque
+import json
+from pathlib import Path
 
 try:
     import curses
@@ -30,6 +32,21 @@ STATUS_PLAYING = "PLAYING"
 STATUS_PAUSED = "PAUSED"
 STATUS_GAME_OVER = "GAME_OVER"
 
+HIGH_SCORE_FILE = Path(__file__).with_name("high_score.json")
+
+
+def load_high_score():
+    try:
+        with HIGH_SCORE_FILE.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+        return max(0, int(data["high_score"]))
+    except (FileNotFoundError, ValueError, KeyError, TypeError, OSError):
+        return 0
+
+
+def save_high_score(score):
+    with HIGH_SCORE_FILE.open("w", encoding="utf-8") as file:
+        json.dump({"high_score": score}, file)
 
 def clamp(value, minimum, maximum):
     """値が指定範囲からはみ出さないようにする。"""
@@ -49,7 +66,8 @@ def create_state(field_width, field_height, rng):
         "base_speed": 1.0,
         "elapsed_time": 0.0,   # 一時停止中は増えない
         "scroll_count": 0,    # コースが進んだ行数
-        "score": 0,           # w11演習01で更新する
+        "score": 0, # w11演習01で更新する
+        "high_score": load_high_score(),
         "level": 1,           # 100行進むごとに上昇
         "lives": 3,  # プレイヤーの残りライフ
         "scroll_progress": 0.0,
@@ -101,8 +119,16 @@ def create_course_row(state, rng, with_tree=True):
     return {"left": left, "right": right, "tree": tree, "coin": coin}
 
 def update_distance_score(state):
-    """w11演習01：コースが1行進んだときに、1回だけ呼び出される。"""
+    """コースが1行進むたびにスコアを更新する。"""
     state["score"] += 1
+    update_high_score(state)
+
+
+def update_high_score(state):
+    """最高スコアを更新して保存する。"""
+    if state["score"] > state["high_score"]:
+        state["high_score"] = state["score"]
+        save_high_score(state["high_score"])
 
 
 def move_course_one_row(state, rng):
@@ -150,7 +176,8 @@ def check_collision(state):
     elif row["coin"] == player_x:
         state["score"] += 100
         row["coin"] = None
-        
+        update_high_score(state)
+    
 def update_game(state, dt, rng):
     """プレイ中だけ時間・位置・コースを更新する。"""
     if state["status"] != STATUS_PLAYING:
@@ -227,7 +254,8 @@ def draw_game(screen, state):
     mins, seconds = divmod(int(t), 60)
     hud = (
         f"LV {state['level']:02d} | LIVES {state['lives']} | "
-        f"SCORE {state['score']:05d} | DIST {state['scroll_count']:05d} | "
+        f"SCORE {state['score']:05d} | BEST {state['high_score']:05d} | "
+        f"DIST {state['scroll_count']:05d} | "
         f"TIME {mins:02d}:{seconds:02d}"
 )
     turn = "LEFT" if state["direction"] == -1 else "RIGHT"
