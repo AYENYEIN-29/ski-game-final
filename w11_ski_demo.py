@@ -70,6 +70,7 @@ def create_state(field_width, field_height, rng):
         "high_score": load_high_score(),
         "level": 1,           # 100行進むごとに上昇
         "lives": 3,  # プレイヤーの残りライフ
+        "shield": 0,
         "scroll_progress": 0.0,
         "field_width": field_width,
         "field_height": field_height,
@@ -116,7 +117,20 @@ def create_course_row(state, rng, with_tree=True):
         if coin == tree:
             coin = None
 
-    return {"left": left, "right": right, "tree": tree, "coin": coin}
+        # シールドアイテムの生成
+    shield = None
+    if with_tree and rng.random() < 0.08:
+        shield = rng.randint(left + 3, right - 3)
+        if shield == tree or shield == coin:
+            shield = None
+
+    return {
+        "left": left,
+        "right": right,
+        "tree": tree,
+        "coin": coin,
+        "shield": shield,
+    }
 
 def update_distance_score(state):
     """コースが1行進むたびにスコアを更新する。"""
@@ -159,7 +173,10 @@ def check_collision(state):
         reason = None
 
     if reason:
-        state["lives"] -= 1
+        if state["shield"] == 1:
+            state["shield"] = 0
+        else:
+            state["lives"] -= 1
 
         if state["lives"] <= 0:
             state["game_over_reason"] = reason
@@ -177,7 +194,11 @@ def check_collision(state):
         state["score"] += 100
         row["coin"] = None
         update_high_score(state)
-    
+
+    elif row["shield"] == player_x:
+        state["shield"] = 1
+        row["shield"] = None
+        
 def update_game(state, dt, rng):
     """プレイ中だけ時間・位置・コースを更新する。"""
     if state["status"] != STATUS_PLAYING:
@@ -259,7 +280,7 @@ def draw_game(screen, state):
         f"TIME {mins:02d}:{seconds:02d}"
 )
     turn = "LEFT" if state["direction"] == -1 else "RIGHT"
-    info = f"SPEED {state['speed']:.2f}x | TURN {turn} | STATE {state['status']}"
+    info = f"SHIELD {state['shield']} | SPEED {state['speed']:.2f}x | TURN {turn} | STATE {state['status']}"
     draw_line(screen, 0, hud, curses.A_BOLD)
     draw_line(screen, 1, info)
     screen.addnstr(2, offset, "=" * width, width)
@@ -275,6 +296,8 @@ def draw_game(screen, state):
             chars[row["tree"]] = "A"
         if row["coin"] is not None:
             chars[row["coin"]] = "@"
+        if row["shield"] is not None:
+            chars[row["shield"]] = "S"
         if i == state["y"] and 0 <= player_x < width:
             chars[player_x] = "X" if state["status"] == STATUS_GAME_OVER else "O"
         screen.addnstr(FIELD_TOP + i, offset, "".join(chars), width)
